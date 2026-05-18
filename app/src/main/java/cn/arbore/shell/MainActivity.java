@@ -11,9 +11,11 @@ import android.location.LocationManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.text.InputType;
 import android.text.TextUtils;
 import android.view.KeyEvent;
 import android.view.View;
+import android.widget.EditText;
 import android.webkit.CookieManager;
 import android.webkit.GeolocationPermissions;
 import android.webkit.PermissionRequest;
@@ -64,6 +66,7 @@ public class MainActivity extends AppCompatActivity {
     private static final int REQ_LOCATION = 0x2002;
 
     private static final String CAPABILITY_TEST_URL = "file:///android_asset/shell_test/index.html";
+    private static final String SHELL_MENU_PASSWORD = "55225566";
 
     /**
      * Mobile entry. Appended to the configured base URL so the shell skips the PC
@@ -142,7 +145,7 @@ public class MainActivity extends AppCompatActivity {
         });
         btnReload.setOnClickListener(v -> reloadStartUrl());
         btnSettings.setOnClickListener(v -> openSettings());
-        btnFloatingSettings.setOnClickListener(v -> showShellMenu());
+        btnFloatingSettings.setOnClickListener(v -> promptShellMenuPassword());
 
         configureWebView();
         registerScanLauncher();
@@ -325,6 +328,29 @@ public class MainActivity extends AppCompatActivity {
 
     private void openSettings() {
         startActivityForResult(new Intent(this, SettingsActivity.class), REQ_SETTINGS);
+    }
+
+    /** Password gate before opening the wrench (shell) menu. */
+    private void promptShellMenuPassword() {
+        EditText input = new EditText(this);
+        input.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_VARIATION_PASSWORD);
+        int pad = (int) (getResources().getDisplayMetrics().density * 16 + 0.5f);
+        input.setPadding(pad, pad, pad, pad);
+        input.setHint(getString(R.string.hint_shell_menu_password));
+
+        new androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle(R.string.title_shell_menu_password)
+                .setView(input)
+                .setPositiveButton(R.string.action_confirm, (dialog, which) -> {
+                    String entered = input.getText() == null ? "" : input.getText().toString().trim();
+                    if (SHELL_MENU_PASSWORD.equals(entered)) {
+                        showShellMenu();
+                    } else {
+                        Toast.makeText(this, R.string.toast_shell_menu_denied, Toast.LENGTH_SHORT).show();
+                    }
+                })
+                .setNegativeButton(R.string.action_cancel, null)
+                .show();
     }
 
     /** Quick action sheet for the user to switch server URL / reload / clear cache. */

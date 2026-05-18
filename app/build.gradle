@@ -10,8 +10,8 @@ android {
         applicationId 'cn.arbore.shell'
         minSdk 21
         targetSdk 34
-        versionCode 30012
-        versionName '3.0.12'
+        versionCode 30013
+        versionName '3.0.13'
 
         ndk {
             abiFilters 'arm64-v8a', 'armeabi-v7a'
