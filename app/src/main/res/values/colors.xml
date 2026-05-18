@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="brand_900">#0F2620</color>
+    <color name="brand_800">#1A3F31</color>
+    <color name="brand_700">#1F4D3B</color>
+    <color name="brand_600">#2C6F4E</color>
+    <color name="brand_500">#3F8B63</color>
+
+    <color name="white">#FFFFFFFF</color>
+    <color name="black">#FF000000</color>
+    <color name="background_light">#FFF8FAF9</color>
+</resources>

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="server_settings"
+        android:enabled="true"
+        android:icon="@android:drawable/ic_menu_preferences"
+        android:shortcutShortLabel="@string/action_settings_shortcut"
+        android:shortcutLongLabel="@string/action_settings_shortcut">
+        <intent
+            android:action="cn.arbore.shell.OPEN_SETTINGS"
+            android:targetPackage="cn.arbore.shell"
+            android:targetClass="cn.arbore.shell.SettingsActivity" />
+        <categories android:name="android.shortcut.conversation" />
+    </shortcut>
+</shortcuts>

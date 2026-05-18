@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.ArboreShell" parent="Theme.MaterialComponents.Light.NoActionBar">
+        <item name="colorPrimary">@color/brand_700</item>
+        <item name="colorPrimaryVariant">@color/brand_800</item>
+        <item name="colorOnPrimary">@color/white</item>
+        <item name="colorSecondary">@color/brand_600</item>
+        <item name="colorOnSecondary">@color/white</item>
+        <item name="android:statusBarColor">@color/brand_800</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowBackground">@drawable/splash_background</item>
+    </style>
+
+    <style name="Theme.ArboreShell.Settings" parent="Theme.MaterialComponents.Light">
+        <item name="colorPrimary">@color/brand_700</item>
+        <item name="colorPrimaryDark">@color/brand_800</item>
+        <item name="colorAccent">@color/brand_600</item>
+    </style>
+</resources>

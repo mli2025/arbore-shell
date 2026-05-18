@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <title>Arbore Shell 能力测试</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 12px; background: #f4f7f5; color: #1a2e24; }
+    h1 { font-size: 18px; margin: 0 0 4px; }
+    .sub { font-size: 12px; color: #5a6b62; margin-bottom: 12px; }
+    .card { background: #fff; border-radius: 10px; padding: 12px; margin-bottom: 10px; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+    .card h2 { font-size: 14px; margin: 0 0 8px; color: #1f4d3b; }
+    button { display: block; width: 100%; margin: 6px 0; padding: 10px; border: none; border-radius: 8px;
+      background: #1f4d3b; color: #fff; font-size: 14px; }
+    button.secondary { background: #e8f0eb; color: #1f4d3b; }
+    pre { background: #0f2620; color: #c8e6c9; padding: 8px; border-radius: 6px; font-size: 11px;
+      white-space: pre-wrap; word-break: break-all; max-height: 120px; overflow: auto; margin: 8px 0 0; }
+    .ok { color: #2e7d32; } .fail { color: #c62828; } .warn { color: #ef6c00; }
+    input[type=file] { width: 100%; font-size: 12px; margin-top: 6px; }
+    video { width: 100%; max-height: 160px; background: #000; border-radius: 6px; margin-top: 6px; }
+  </style>
+</head>
+<body>
+  <h1>Arbore Shell 能力测试</h1>
+  <p class="sub" id="env">检测环境中…</p>
+
+  <div class="card">
+    <h2>环境信息</h2>
+    <button type="button" onclick="refreshEnv()">刷新环境信息</button>
+    <pre id="log-env">—</pre>
+  </div>
+
+  <div class="card">
+    <h2>1. 原生扫码（推荐，HTTP 可用）</h2>
+    <p style="font-size:12px;margin:0 0 6px">调用 <code>AndroidBridge.scan(token)</code>，结果走 <code>__arboreScanResult</code></p>
+    <button type="button" onclick="testNativeScan()">打开原生扫码</button>
+    <pre id="log-scan">—</pre>
+  </div>
+
+  <div class="card">
+    <h2>2. 网页摄像头（getUserMedia）</h2>
+    <p style="font-size:12px;margin:0 0 6px;color:#c62828">
+      <strong>仅预览，不能扫码。</strong> 要有画面还需再集成 Quagga/ZXing-js；业务请用第1项原生扫码。
+    </p>
+    <button type="button" onclick="testGetUserMedia()">测试 getUserMedia（仅预览）</button>
+    <video id="cam" playsinline muted autoplay></video>
+    <pre id="log-cam">—</pre>
+  </div>
+
+  <div class="card">
+    <h2>3. 文件上传（input file）</h2>
+    <input type="file" accept="image/*" capture="environment" onchange="onFilePicked(this)" />
+    <pre id="log-file">—</pre>
+  </div>
+
+  <div class="card">
+    <h2>4. 文件下载</h2>
+    <button type="button" onclick="testDownload()">下载测试 TXT</button>
+    <pre id="log-dl">—</pre>
+  </div>
+
+  <div class="card">
+    <h2>5. 推送 / 用户绑定（JPush）</h2>
+    <button type="button" onclick="testPushInfo()">读取 RegistrationId / 已绑定用户</button>
+    <button type="button" class="secondary" onclick="testBindUser()">测试 bindUser(999, test)</button>
+    <button type="button" class="secondary" onclick="testUnbind()">测试 unbindUser()</button>
+    <pre id="log-push">—</pre>
+  </div>
+
+  <div class="card">
+    <h2>6. 定位</h2>
+    <p style="font-size:12px;margin:0 0 6px">浏览器 geolocation 需壳授权；若仍失败请用「原生定位」</p>
+    <button type="button" onclick="testNativeLocation()">原生定位（AndroidBridge，推荐）</button>
+    <button type="button" class="secondary" onclick="testGeoLocation()">浏览器 geolocation</button>
+    <pre id="log-loc">—</pre>
+  </div>
+
+  <div class="card">
+    <h2>7. Cookie</h2>
+    <button type="button" onclick="testCookie()">写入并读取测试 Cookie</button>
+    <pre id="log-cookie">—</pre>
+  </div>
+
+  <div class="card">
+    <h2>8. 旧 Cordova 扫码（对照）</h2>
+    <p style="font-size:12px;margin:0 0 6px">v3 壳<strong>未集成</strong> cordova.plugins.barcodeScanner，此处应失败</p>
+    <button type="button" onclick="testCordovaScan()">cordova.plugins.barcodeScanner.scan</button>
+    <pre id="log-cordova">—</pre>
+  </div>
+
+  <button type="button" class="secondary" style="margin-top:8px" onclick="backToApp()">返回业务页</button>
+
+  <script>
+    var scanResolvers = {};
+    window.__arboreScanResult = function(token, code, err) {
+      var r = scanResolvers[token];
+      if (!r) return;
+      delete scanResolvers[token];
+      if (err) r.reject(new Error(err));
+      else r.resolve(code || '');
+    };
+    window.__arboreLocationResult = function(token, json, err) {
+      var r = locResolvers[token];
+      if (!r) return;
+      delete locResolvers[token];
+      if (err) r.reject(new Error(err));
+      else r.resolve(json ? JSON.parse(json) : null);
+    };
+    var locResolvers = {};
+
+    function hasBridge() {
+      return !!(window.AndroidBridge);
+    }
+    function bridgeCall(fn) {
+      if (!hasBridge()) throw new Error('无 AndroidBridge（非壳环境或桥未注入）');
+      return fn(window.AndroidBridge);
+    }
+    function setLog(id, text, cls) {
+      var el = document.getElementById(id);
+      el.textContent = text;
+      el.className = cls || '';
+    }
+    function refreshEnv() {
+      var ua = navigator.userAgent;
+      var secure = location.protocol === 'https:' ? '是' : '否（HTTP 下摄像头受限）';
+      var lines = [
+        'UA: ' + ua,
+        '是否壳: ' + (/ArboreShell\//i.test(ua) ? '是' : '否'),
+        'AndroidBridge: ' + (hasBridge() ? '有' : '无'),
+        '安全上下文 HTTPS: ' + secure,
+        'mediaDevices: ' + (navigator.mediaDevices ? '有' : '无'),
+        'cordova: ' + (window.cordova ? '有' : '无'),
+        'cordova.barcodeScanner: ' + (window.cordova && cordova.plugins && cordova.plugins.barcodeScanner ? '有' : '无')
+      ];
+      try {
+        if (hasBridge() && AndroidBridge.getBuildLabel) lines.push('Build: ' + AndroidBridge.getBuildLabel());
+        if (hasBridge() && AndroidBridge.getServerUrl) lines.push('Server: ' + AndroidBridge.getServerUrl());
+      } catch (e) {}
+      setLog('log-env', lines.join('\n'));
+      document.getElementById('env').textContent = /ArboreShell\//i.test(ua) ? '当前在 Arbore 壳内' : '当前不在壳内（浏览器）';
+    }
+    function nativeScan() {
+      return new Promise(function(resolve, reject) {
+        var token = 't_' + Date.now();
+        scanResolvers[token] = { resolve: resolve, reject: reject };
+        bridgeCall(function(b) { b.scan(token); });
+      });
+    }
+    function testNativeScan() {
+      setLog('log-scan', '打开扫码…', 'warn');
+      nativeScan().then(function(code) {
+        setLog('log-scan', '成功: ' + code, 'ok');
+      }).catch(function(e) {
+        setLog('log-scan', '失败: ' + e.message, 'fail');
+      });
+    }
+    function testGetUserMedia() {
+      setLog('log-cam', '请求中…', 'warn');
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setLog('log-cam', 'navigator.mediaDevices.getUserMedia 不可用（HTTP 常见）', 'fail');
+        return;
+      }
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+        .then(function(stream) {
+          document.getElementById('cam').srcObject = stream;
+          setLog('log-cam', '成功：已拿到视频流（仅预览，不能识别条码；扫码请用第1项）', 'ok');
+        })
+        .catch(function(e) {
+          setLog('log-cam', '失败: ' + e.name + ' ' + e.message, 'fail');
+        });
+    }
+    function onFilePicked(input) {
+      var f = input.files && input.files[0];
+      if (!f) { setLog('log-file', '未选择文件', 'warn'); return; }
+      setLog('log-file', '已选: ' + f.name + ' (' + f.size + ' bytes, ' + f.type + ')', 'ok');
+    }
+    function testDownload() {
+      var blob = new Blob(['Arbore Shell download test ' + new Date().toISOString()], { type: 'text/plain' });
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'arbore-test.txt';
+      a.click();
+      setLog('log-dl', '已触发下载 arbore-test.txt', 'ok');
+    }
+    function testPushInfo() {
+      try {
+        var reg = bridgeCall(function(b) { return b.getRegistrationId(); });
+        var uid = bridgeCall(function(b) { return b.getBoundUserId(); });
+        var uname = bridgeCall(function(b) { return b.getBoundUserName(); });
+        setLog('log-push',
+          'RegistrationId: ' + (reg || '(空，可能尚未连上极光)') + '\n' +
+          '已绑定用户: ' + (uid || '(无)') + ' ' + (uname || ''), 'ok');
+      } catch (e) {
+        setLog('log-push', e.message, 'fail');
+      }
+    }
+    function testBindUser() {
+      try {
+        bridgeCall(function(b) { b.bindUser('999', 'shell-test'); });
+        setLog('log-push', '已调用 bindUser(999, shell-test)，请到极光控制台按 alias=999 发测试推送', 'ok');
+      } catch (e) { setLog('log-push', e.message, 'fail'); }
+    }
+    function testUnbind() {
+      try {
+        bridgeCall(function(b) { b.unbindUser(); });
+        setLog('log-push', '已调用 unbindUser()', 'ok');
+      } catch (e) { setLog('log-push', e.message, 'fail'); }
+    }
+    function testNativeLocation() {
+      setLog('log-loc', '定位中…', 'warn');
+      var token = 'loc_' + Date.now();
+      locResolvers[token] = {
+        resolve: function(d) { setLog('log-loc', JSON.stringify(d, null, 2), 'ok'); },
+        reject: function(e) { setLog('log-loc', e.message, 'fail'); }
+      };
+      try {
+        bridgeCall(function(b) { b.requestLocation(token); });
+      } catch (e) {
+        setLog('log-loc', e.message, 'fail');
+      }
+    }
+    function testGeoLocation() {
+      if (!navigator.geolocation) {
+        setLog('log-loc', 'navigator.geolocation 不可用', 'fail');
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        function(p) {
+          setLog('log-loc', 'lat=' + p.coords.latitude + ' lng=' + p.coords.longitude, 'ok');
+        },
+        function(e) { setLog('log-loc', e.message, 'fail'); },
+        { enableHighAccuracy: true, timeout: 15000 }
+      );
+    }
+    function testCookie() {
+      document.cookie = 'arbore_test=1; path=/';
+      setLog('log-cookie', 'document.cookie =\n' + document.cookie, 'ok');
+    }
+    function testCordovaScan() {
+      if (!window.cordova || !cordova.plugins || !cordova.plugins.barcodeScanner) {
+        setLog('log-cordova', 'cordova.plugins.barcodeScanner 不存在（v3 壳预期结果）', 'fail');
+        return;
+      }
+      cordova.plugins.barcodeScanner.scan(
+        function(r) { setLog('log-cordova', JSON.stringify(r), 'ok'); },
+        function(e) { setLog('log-cordova', String(e), 'fail'); }
+      );
+    }
+    function backToApp() {
+      try {
+        if (hasBridge() && AndroidBridge.reloadBusiness) {
+          AndroidBridge.reloadBusiness();
+          return;
+        }
+      } catch (e) {}
+      if (history.length > 1) history.back();
+    }
+    refreshEnv();
+  </script>
+</body>
+</html>

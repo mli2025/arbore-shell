@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Arbore TPM</string>
+    <string name="title_settings">服务器设置</string>
+
+    <string name="hint_server_url">服务器地址 (如 http://192.168.1.100:8080)</string>
+    <string name="action_save">保存</string>
+    <string name="action_cancel">取消</string>
+    <string name="action_reload">重新加载</string>
+    <string name="action_open_settings">打开设置</string>
+    <string name="action_clear_cache">清除缓存（含登录状态）</string>
+    <string name="action_settings_shortcut">服务器设置</string>
+    <string name="action_settings_btn">设置</string>
+    <string name="msg_cache_cleared">缓存已清除，请重新加载</string>
+
+    <string name="error_invalid_url">地址格式不正确，请以 http:// 或 https:// 开头</string>
+    <string name="error_network">网络异常，请检查服务器或网络</string>
+
+    <string name="notification_channel_default">默认通知</string>
+    <string name="notification_channel_default_desc">系统消息与业务通知</string>
+
+    <string name="toast_camera_denied">摄像头权限被拒绝，无法扫码，请在系统设置中开启</string>
+    <string name="toast_location_denied">定位权限被拒绝</string>
+    <string name="toast_notification_denied">通知权限被拒绝，将无法收到推送提醒，可在系统设置中开启</string>
+    <string name="menu_capability_test">能力测试页</string>
+    <string name="title_capability_test">能力测试</string>
+</resources>
