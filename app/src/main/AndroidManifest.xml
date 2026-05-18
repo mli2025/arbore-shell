@@ -86,6 +86,17 @@
             </intent-filter>
         </receiver>
 
+        <!-- JPush 5.x 强制要求：必须自定义一个 Service 继承 JCommonService，
+             否则 SDK 拒绝启动注册流程，RegistrationId 永远为空 -->
+        <service
+            android:name=".push.ArboreJCommonService"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="cn.jiguang.user.service.action" />
+            </intent-filter>
+        </service>
+
     </application>
 
 </manifest>
