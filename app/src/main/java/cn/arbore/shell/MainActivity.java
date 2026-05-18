@@ -49,6 +49,7 @@ import androidx.activity.result.contract.ActivityResultContracts;
 import java.util.Arrays;
 
 import cn.arbore.shell.push.ArboreJPushReceiver;
+import cn.arbore.shell.push.JPushHelper;
 import cn.jpush.android.api.JPushInterface;
 
 /**
@@ -163,6 +164,8 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
         requestNotificationPermissionIfNeeded();
+        JPushHelper.ensureInit(this);
+        JPushHelper.pollRegistrationId(this, 15, null);
         loadStartUrl();
         handleDeepLinkIntent(getIntent());
 

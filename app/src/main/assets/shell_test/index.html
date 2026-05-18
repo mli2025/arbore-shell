@@ -63,6 +63,7 @@
   <div class="card">
     <h2>5. 推送 / 用户绑定（JPush）</h2>
     <button type="button" onclick="testPushInfo()">读取 RegistrationId / 已绑定用户</button>
+    <button type="button" class="secondary" onclick="forceJPushInit()">强制重新初始化 JPush</button>
     <button type="button" class="secondary" onclick="testBindUser()">测试 bindUser(999, test)</button>
     <button type="button" class="secondary" onclick="testUnbind()">测试 unbindUser()</button>
     <pre id="log-push">—</pre>
@@ -183,14 +184,60 @@
       a.click();
       setLog('log-dl', '已触发下载 arbore-test.txt', 'ok');
     }
+    function forceJPushInit() {
+      try {
+        bridgeCall(function(b) {
+          if (b.retryJPushInit) b.retryJPushInit();
+        });
+        setLog('log-push', '已调用 retryJPushInit()，2 秒后开始轮询…', 'warn');
+        setTimeout(testPushInfo, 2000);
+      } catch (e) {
+        setLog('log-push', e.message, 'fail');
+      }
+    }
     function testPushInfo() {
       try {
-        var reg = bridgeCall(function(b) { return b.getRegistrationId(); });
-        var uid = bridgeCall(function(b) { return b.getBoundUserId(); });
-        var uname = bridgeCall(function(b) { return b.getBoundUserName(); });
-        setLog('log-push',
-          'RegistrationId: ' + (reg || '(空，可能尚未连上极光)') + '\n' +
-          '已绑定用户: ' + (uid || '(无)') + ' ' + (uname || ''), 'ok');
+        var diag = '';
+        try {
+          if (hasBridge() && AndroidBridge.getJPushDiagnostics) {
+            diag = AndroidBridge.getJPushDiagnostics();
+          }
+          if (hasBridge() && AndroidBridge.getBuildLabel) {
+            diag = 'shell ' + AndroidBridge.getBuildLabel() + '\n' + diag;
+          }
+        } catch (e2) {}
+        var attempt = 0;
+        var maxAttempts = 10;
+        function poll() {
+          attempt++;
+          var reg = bridgeCall(function(b) { return b.getRegistrationId(); });
+          var uid = bridgeCall(function(b) { return b.getBoundUserId(); });
+          var uname = bridgeCall(function(b) { return b.getBoundUserName(); });
+          if (reg) {
+            setLog('log-push',
+              'RegistrationId: ' + reg + '\n' +
+              '已绑定用户: ' + (uid || '(无)') + ' ' + (uname || '') + '\n\n' +
+              (diag || ''), 'ok');
+            return;
+          }
+          if (attempt < maxAttempts) {
+            setLog('log-push',
+              '等待极光注册… (' + attempt + '/' + maxAttempts + ')\n' +
+              '请保持网络畅通，约 2 秒后自动重试\n\n' + (diag || ''), 'warn');
+            setTimeout(poll, 2000);
+            return;
+          }
+          setLog('log-push',
+            'RegistrationId 仍为空（注册未成功）\n\n' +
+            '常见原因：\n' +
+            '1. 极光控制台「Android 包名」与下面 package 不一致\n' +
+            '   （当前 APK 包名见下方 package= 一行，须与极光一致）\n' +
+            '2. AppKey 与 APK 内不一致（需重装新编译的 APK）\n' +
+            '3. 手机无网 / 公司网络拦截 api.jpush.cn\n' +
+            '4. 刚装 App，可多等 30 秒再点一次\n\n' +
+            (diag || ''), 'fail');
+        }
+        poll();
       } catch (e) {
         setLog('log-push', e.message, 'fail');
       }

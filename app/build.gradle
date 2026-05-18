@@ -10,19 +10,20 @@ android {
         applicationId 'cn.arbore.shell'
         minSdk 21
         targetSdk 34
-        versionCode 30004
-        versionName '3.0.4'
+        versionCode 30011
+        versionName '3.0.11'
 
         ndk {
             abiFilters 'arm64-v8a', 'armeabi-v7a'
         }
 
-        // JPush AppKey (reused from legacy project; replace if a new app is registered)
+        // JPush AppKey — must match the key shown in Jiguang console for this app
         manifestPlaceholders = [
                 JPUSH_PKGNAME : applicationId,
-                JPUSH_APPKEY  : '009282e03244448ea3c53b14',
+                JPUSH_APPKEY  : '6c8c8152ef386960f9a475e7',
                 JPUSH_CHANNEL : 'developer-default'
         ]
+        buildConfigField 'String', 'JPUSH_APPKEY', '"6c8c8152ef386960f9a475e7"'
     }
 
     compileOptions {
@@ -37,7 +38,7 @@ android {
 
     buildTypes {
         debug {
-            applicationIdSuffix '.debug'
+            // 不再加 .debug 后缀，包名固定 cn.arbore.shell，与极光控制台登记一致
             versionNameSuffix '-debug'
             minifyEnabled false
         }
@@ -62,7 +63,8 @@ dependencies {
 
     // JPush SDK (push notifications)
     implementation 'cn.jiguang.sdk:jpush:5.5.0'
-    implementation 'cn.jiguang.sdk:jcore:4.7.0'
+    // Align with jpush:5.5.0 (resolves to jcore 5.4.x); explicit 4.7.0 was overridden anyway
+    implementation 'cn.jiguang.sdk:jcore:5.4.3'
 
     // Native QR / barcode scanner. Used because Chromium WebView blocks
     // navigator.mediaDevices on insecure (http) origins, so the in-page

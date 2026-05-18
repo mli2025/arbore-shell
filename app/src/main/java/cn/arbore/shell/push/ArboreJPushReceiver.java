@@ -6,6 +6,7 @@ import android.text.TextUtils;
 import android.util.Log;
 
 import cn.arbore.shell.MainActivity;
+import cn.arbore.shell.Prefs;
 import cn.jpush.android.api.JPushMessage;
 import cn.jpush.android.api.NotificationMessage;
 import cn.jpush.android.service.JPushMessageReceiver;
@@ -66,12 +67,20 @@ public class ArboreJPushReceiver extends JPushMessageReceiver {
     public void onRegister(Context context, String registrationId) {
         super.onRegister(context, registrationId);
         Log.i(TAG, "onRegister id=" + registrationId);
+        if (!TextUtils.isEmpty(registrationId)) {
+            Prefs.get(context).edit()
+                    .putString(Prefs.KEY_JPUSH_REGISTRATION_ID, registrationId)
+                    .apply();
+        }
     }
 
     @Override
     public void onConnected(Context context, boolean isConnected) {
         super.onConnected(context, isConnected);
         Log.i(TAG, "onConnected " + isConnected);
+        Prefs.get(context).edit()
+                .putBoolean(Prefs.KEY_JPUSH_CONNECTED, isConnected)
+                .apply();
     }
 
     @Override

@@ -6,7 +6,7 @@ import android.app.NotificationManager;
 import android.content.Context;
 import android.os.Build;
 
-import cn.jpush.android.api.JPushInterface;
+import cn.arbore.shell.push.JPushHelper;
 
 public class ShellApp extends Application {
 
@@ -22,10 +22,13 @@ public class ShellApp extends Application {
     public void onCreate() {
         super.onCreate();
         instance = this;
+        // 记录 Application.onCreate 是否被真正执行（诊断 ShellApp 未生效场景）
+        Prefs.get(this).edit()
+                .putLong(Prefs.KEY_APP_ONCREATE_AT, System.currentTimeMillis())
+                .apply();
 
         createDefaultNotificationChannel();
-        JPushInterface.setDebugMode(BuildConfig.DEBUG);
-        JPushInterface.init(this);
+        JPushHelper.ensureInit(this);
     }
 
     private void createDefaultNotificationChannel() {

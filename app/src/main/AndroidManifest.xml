@@ -66,13 +66,22 @@
             android:name="JPUSH_APPKEY"
             android:value="${JPUSH_APPKEY}" />
 
+        <!-- Higher initOrder runs first. Setting JCollectionAuth(true) before
+             any JPush provider/service is touched is required since JCore 5.x -->
+        <provider
+            android:name=".push.JPushConsentProvider"
+            android:authorities="${applicationId}.jpush.consent"
+            android:exported="false"
+            android:initOrder="2147483647" />
+
         <!-- 自定义 JPush 消息接收器：处理通知点击 + extras.path 深链 -->
         <receiver
             android:name=".push.ArboreJPushReceiver"
             android:enabled="true"
-            android:exported="false">
+            android:exported="true">
             <intent-filter>
-                <action android:name="cn.jpush.android.intent.RECEIVE_MESSAGE" />
+                <!-- v5.4+ 必须是 RECEIVER_MESSAGE -->
+                <action android:name="cn.jpush.android.intent.RECEIVER_MESSAGE" />
                 <category android:name="${applicationId}" />
             </intent-filter>
         </receiver>

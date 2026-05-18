@@ -6,6 +6,7 @@ import android.text.TextUtils;
 import android.webkit.JavascriptInterface;
 import android.widget.Toast;
 
+import cn.arbore.shell.push.JPushHelper;
 import cn.jpush.android.api.JPushInterface;
 
 /**
@@ -56,8 +57,55 @@ public class AndroidBridge {
     /** Returns the JPush registration id so the web backend can persist a device id per user. */
     @JavascriptInterface
     public String getRegistrationId() {
-        String id = JPushInterface.getRegistrationID(appContext);
-        return id == null ? "" : id;
+        return JPushHelper.readRegistrationId(appContext);
+    }
+
+    /** Force JPush init again (capability test page). */
+    @JavascriptInterface
+    public void retryJPushInit() {
+        activity.runOnUiThread(() -> JPushHelper.ensureInit(appContext));
+    }
+
+    /** Installed package name — must match the Android package registered in Jiguang console. */
+    @JavascriptInterface
+    public String getPackageName() {
+        return appContext.getPackageName();
+    }
+
+    /**
+     * One-line diagnostic for push setup (package name + registration id + bound user).
+     * Shown on the capability test page when RegistrationId is empty.
+     */
+    @JavascriptInterface
+    public String getJPushDiagnostics() {
+        String pkg = appContext.getPackageName();
+        String reg = getRegistrationId();
+        String uid = Prefs.get(appContext).getString(Prefs.KEY_LAST_USER_ID, "");
+        boolean connected = Prefs.get(appContext).getBoolean(Prefs.KEY_JPUSH_CONNECTED, false);
+        int initCount = Prefs.get(appContext).getInt(Prefs.KEY_JPUSH_INIT_COUNT, 0);
+        String supported = android.text.TextUtils.join(",", android.os.Build.SUPPORTED_ABIS);
+        boolean has64 = false;
+        for (String a : android.os.Build.SUPPORTED_ABIS) {
+            if ("arm64-v8a".equals(a)) { has64 = true; break; }
+        }
+        String abiWarn = has64 ? "OK" : "WARN: JPush 5.5 only has arm64-v8a; this device is 32-bit, SDK cannot run";
+        long appOnCreate = Prefs.get(appContext).getLong(Prefs.KEY_APP_ONCREATE_AT, 0);
+        long lastInit = Prefs.get(appContext).getLong(Prefs.KEY_JPUSH_LAST_INIT_AT, 0);
+        String lastErr = Prefs.get(appContext).getString(Prefs.KEY_JPUSH_LAST_ERROR, "");
+        return "build=" + BuildConfig.VERSION_NAME + " (" + BuildConfig.VERSION_CODE + ")"
+                + "\npackage=" + pkg
+                + "\nappKey=" + BuildConfig.JPUSH_APPKEY
+                + "\ndevice=" + android.os.Build.BRAND + " " + android.os.Build.MODEL
+                + " (Android " + android.os.Build.VERSION.RELEASE + ")"
+                + "\nsupportedAbis=" + supported
+                + "\nabiCheck=" + abiWarn
+                + "\nappOnCreate=" + (appOnCreate == 0 ? "(never)" : Long.toString(appOnCreate))
+                + "\nlastInit=" + (lastInit == 0 ? "(never)" : Long.toString(lastInit))
+                + "\nlastError=" + (TextUtils.isEmpty(lastErr) ? "(none)" : lastErr)
+                + "\nregistrationId=" + (TextUtils.isEmpty(reg) ? "(empty)" : reg)
+                + "\njpushConnected=" + connected
+                + "\ninitAttempts=" + initCount
+                + "\nboundUserId=" + (TextUtils.isEmpty(uid) ? "(none)" : uid);
     }
 
     /** Build identifier exposed to the page (e.g. for support overlays). */
