@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Photos captured by the in-app camera intent are written under
+         /sdcard/Android/data/<pkg>/files/Pictures/ and exposed via the
+         FileProvider authority "<pkg>.fileprovider" so they can be returned
+         to the WebView. -->
+    <external-files-path name="captures" path="Pictures/" />
+    <cache-path name="cache" path="." />
+</paths>

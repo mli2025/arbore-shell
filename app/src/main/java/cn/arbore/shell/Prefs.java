@@ -18,6 +18,9 @@ public final class Prefs {
     public static final String KEY_JPUSH_LAST_INIT_AT = "jpush_last_init_at";
     public static final String KEY_JPUSH_LAST_ERROR = "jpush_last_error";
     public static final String KEY_APP_ONCREATE_AT = "app_oncreate_at";
+    /** Persisted X/Y (in pixels, relative to parent) of the draggable wrench button. */
+    public static final String KEY_FLOATING_X = "floating_x";
+    public static final String KEY_FLOATING_Y = "floating_y";
 
     private Prefs() {
     }

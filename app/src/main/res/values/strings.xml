@@ -28,4 +28,9 @@
     <string name="toast_notification_denied">通知权限被拒绝，将无法收到推送提醒，可在系统设置中开启</string>
     <string name="menu_capability_test">能力测试页</string>
     <string name="title_capability_test">能力测试</string>
+
+    <string name="file_chooser_title">选择图片</string>
+    <string name="file_chooser_camera">拍照</string>
+    <string name="file_chooser_gallery">从相册</string>
+    <string name="toast_camera_unavailable">没有可用的相机应用</string>
 </resources>

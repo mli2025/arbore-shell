@@ -10,8 +10,8 @@ android {
         applicationId 'cn.arbore.shell'
         minSdk 21
         targetSdk 34
-        versionCode 30013
-        versionName '3.0.13'
+        versionCode 30015
+        versionName '3.0.15'
 
         ndk {
             abiFilters 'arm64-v8a', 'armeabi-v7a'
@@ -36,6 +36,18 @@ android {
         buildConfig true
     }
 
+    signingConfigs {
+        // Use the local Android debug keystore for release builds so the apk
+        // is installable without managing a separate signing key. This is fine
+        // for the internal shell distribution.
+        release {
+            storeFile file(System.getProperty('user.home') + '/.android/debug.keystore')
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+        }
+    }
+
     buildTypes {
         debug {
             // 不再加 .debug 后缀，包名固定 cn.arbore.shell，与极光控制台登记一致
@@ -45,6 +57,7 @@ android {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.release
         }
     }
 

@@ -18,6 +18,23 @@
     <uses-permission android:name="android.permission.READ_PHONE_STATE"
         tools:node="remove" />
 
+    <!-- Android 11+ package visibility for the intents we launch from
+         WebChromeClient.onShowFileChooser. Without these the system camera /
+         gallery apps cannot be resolved by resolveActivity(). -->
+    <queries>
+        <intent>
+            <action android:name="android.media.action.IMAGE_CAPTURE" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.GET_CONTENT" />
+            <data android:mimeType="image/*" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.PICK" />
+            <data android:mimeType="image/*" />
+        </intent>
+    </queries>
+
     <application
         android:name=".ShellApp"
         android:allowBackup="false"
@@ -58,6 +75,17 @@
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
+
+        <!-- FileProvider for camera-captured photos returned to the WebView. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
         <meta-data
             android:name="JPUSH_CHANNEL"

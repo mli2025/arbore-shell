@@ -11,10 +11,14 @@ import android.location.LocationManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
+import android.provider.MediaStore;
 import android.text.InputType;
 import android.text.TextUtils;
 import android.view.KeyEvent;
+import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.EditText;
 import android.webkit.CookieManager;
 import android.webkit.GeolocationPermissions;
@@ -26,6 +30,8 @@ import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+
+import java.io.File;
 import android.widget.Button;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
@@ -38,6 +44,7 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+import androidx.core.content.FileProvider;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
 import com.google.zxing.client.android.Intents;
@@ -63,7 +70,9 @@ public class MainActivity extends AppCompatActivity {
     private static final int REQ_SETTINGS = 0x1001;
     private static final int REQ_CAMERA = 0x2001;
     private static final int REQ_NOTIFICATION = 0x2002;
-    private static final int REQ_LOCATION = 0x2002;
+    private static final int REQ_LOCATION = 0x2003;
+    /** Camera permission requested specifically for the file chooser flow. */
+    private static final int REQ_CAMERA_FOR_PICKER = 0x2004;
 
     private static final String CAPABILITY_TEST_URL = "file:///android_asset/shell_test/index.html";
     private static final String SHELL_MENU_PASSWORD = "55225566";
@@ -85,6 +94,12 @@ public class MainActivity extends AppCompatActivity {
     private ActivityResultLauncher<ScanOptions> scanLauncher;
     private ActivityResultLauncher<Intent> fileChooserLauncher;
     private ValueCallback<Uri[]> filePathCallback;
+    /** When the file chooser delegates to the camera, the photo lands here. */
+    private Uri pendingPhotoUri;
+    /** Camera permission was requested for an in-flight chooser; true ⇒ camera-only. */
+    private boolean pendingChooserCameraOnly;
+    /** True while waiting for camera permission to launch the image chooser. */
+    private boolean pendingChooserAllowGallery;
 
     private static final String JS_BOOTSTRAP =
             // Auto-detect the logged-in user via /Account/Profile cookie session.
@@ -143,9 +158,21 @@ public class MainActivity extends AppCompatActivity {
             }
             swipe.postDelayed(() -> swipe.setRefreshing(false), 600);
         });
+        // Only allow pull-to-refresh when the WebView is actually scrolled to the top.
+        // WebView.getScrollY() == 0 ⇒ at top ⇒ enable refresh; otherwise disable so
+        // a downward swipe scrolls the page instead of triggering reload.
+        swipe.setOnChildScrollUpCallback((parent, child) -> webView.getScrollY() > 0);
+        // Require a longer pull distance to avoid accidental refresh.
+        float density = getResources().getDisplayMetrics().density;
+        swipe.setDistanceToTriggerSync((int) (140 * density + 0.5f));
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            webView.setOnScrollChangeListener((v, sx, sy, osx, osy) ->
+                    swipe.setEnabled(sy == 0));
+        }
         btnReload.setOnClickListener(v -> reloadStartUrl());
         btnSettings.setOnClickListener(v -> openSettings());
         btnFloatingSettings.setOnClickListener(v -> promptShellMenuPassword());
+        installDragHandler(btnFloatingSettings);
 
         configureWebView();
         registerScanLauncher();
@@ -330,6 +357,72 @@ public class MainActivity extends AppCompatActivity {
         startActivityForResult(new Intent(this, SettingsActivity.class), REQ_SETTINGS);
     }
 
+    /**
+     * Make the floating wrench button draggable. Persists the X/Y in prefs so
+     * the user's chosen position is restored on next launch / process restart.
+     * A short tap still fires the normal click (password prompt).
+     */
+    private void installDragHandler(View handle) {
+        // Restore saved position once the parent has been laid out.
+        handle.post(() -> {
+            ViewGroup parent = (ViewGroup) handle.getParent();
+            if (parent == null) return;
+            float savedX = Prefs.get(this).getFloat(Prefs.KEY_FLOATING_X, -1f);
+            float savedY = Prefs.get(this).getFloat(Prefs.KEY_FLOATING_Y, -1f);
+            if (savedX < 0 || savedY < 0) return;
+            float maxX = Math.max(0, parent.getWidth() - handle.getWidth());
+            float maxY = Math.max(0, parent.getHeight() - handle.getHeight());
+            handle.setX(Math.max(0, Math.min(maxX, savedX)));
+            handle.setY(Math.max(0, Math.min(maxY, savedY)));
+        });
+
+        final int touchSlop = (int) (getResources().getDisplayMetrics().density * 8 + 0.5f);
+        final float[] start = new float[2];
+        final float[] down = new float[2];
+        final boolean[] dragging = new boolean[]{false};
+
+        handle.setOnTouchListener((v, event) -> {
+            switch (event.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    dragging[0] = false;
+                    down[0] = event.getRawX();
+                    down[1] = event.getRawY();
+                    start[0] = v.getX();
+                    start[1] = v.getY();
+                    return false;
+                case MotionEvent.ACTION_MOVE: {
+                    float dx = event.getRawX() - down[0];
+                    float dy = event.getRawY() - down[1];
+                    if (!dragging[0]) {
+                        if (Math.abs(dx) <= touchSlop && Math.abs(dy) <= touchSlop) {
+                            return false;
+                        }
+                        dragging[0] = true;
+                    }
+                    ViewGroup parent = (ViewGroup) v.getParent();
+                    if (parent == null) return true;
+                    float maxX = Math.max(0, parent.getWidth() - v.getWidth());
+                    float maxY = Math.max(0, parent.getHeight() - v.getHeight());
+                    v.setX(Math.max(0, Math.min(maxX, start[0] + dx)));
+                    v.setY(Math.max(0, Math.min(maxY, start[1] + dy)));
+                    return true;
+                }
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL:
+                    if (dragging[0]) {
+                        Prefs.get(this).edit()
+                                .putFloat(Prefs.KEY_FLOATING_X, v.getX())
+                                .putFloat(Prefs.KEY_FLOATING_Y, v.getY())
+                                .apply();
+                        return true;
+                    }
+                    return false;
+                default:
+                    return false;
+            }
+        });
+    }
+
     /** Password gate before opening the wrench (shell) menu. */
     private void promptShellMenuPassword() {
         EditText input = new EditText(this);
@@ -493,14 +586,31 @@ public class MainActivity extends AppCompatActivity {
                 filePathCallback.onReceiveValue(null);
             }
             filePathCallback = callback;
-            Intent intent = params.createIntent();
-            intent.addCategory(Intent.CATEGORY_OPENABLE);
-            try {
-                fileChooserLauncher.launch(Intent.createChooser(intent, "选择文件"));
-            } catch (Exception e) {
-                filePathCallback = null;
-                return false;
+            pendingPhotoUri = null;
+
+            String[] acceptTypes = params == null ? null : params.getAcceptTypes();
+            boolean acceptsImage = acceptsImage(acceptTypes);
+            boolean captureFlag = params != null && params.isCaptureEnabled();
+            boolean multiple = params != null
+                    && params.getMode() == FileChooserParams.MODE_OPEN_MULTIPLE;
+
+            if (!acceptsImage) {
+                // Non-image input — keep the existing behaviour (system file picker).
+                Intent intent = params.createIntent();
+                intent.addCategory(Intent.CATEGORY_OPENABLE);
+                try {
+                    fileChooserLauncher.launch(Intent.createChooser(intent,
+                            getString(R.string.file_chooser_title)));
+                    return true;
+                } catch (Exception e) {
+                    filePathCallback = null;
+                    return false;
+                }
             }
+            // Image input — replicate the old Cordova-camera UX:
+            //   * <input ... capture> ⇒ open the camera directly
+            //   * accept=image/* (no capture) ⇒ chooser with camera + gallery
+            launchImageChooser(captureFlag, multiple);
             return true;
         }
 
@@ -536,23 +646,131 @@ public class MainActivity extends AppCompatActivity {
                 new ActivityResultContracts.StartActivityForResult(),
                 result -> {
                     Uri[] uris = null;
-                    if (result.getResultCode() == Activity.RESULT_OK && result.getData() != null) {
+                    if (result.getResultCode() == Activity.RESULT_OK) {
                         Intent data = result.getData();
-                        if (data.getClipData() != null) {
+                        if (data != null && data.getClipData() != null) {
                             int n = data.getClipData().getItemCount();
                             uris = new Uri[n];
                             for (int i = 0; i < n; i++) {
                                 uris[i] = data.getClipData().getItemAt(i).getUri();
                             }
-                        } else if (data.getData() != null) {
+                        } else if (data != null && data.getData() != null) {
                             uris = new Uri[]{data.getData()};
+                        } else if (pendingPhotoUri != null) {
+                            // Camera path: ACTION_IMAGE_CAPTURE returns no data; the
+                            // image was written to the URI we supplied via EXTRA_OUTPUT.
+                            uris = new Uri[]{pendingPhotoUri};
                         }
                     }
+                    pendingPhotoUri = null;
                     if (filePathCallback != null) {
                         filePathCallback.onReceiveValue(uris);
                         filePathCallback = null;
                     }
                 });
+    }
+
+    /**
+     * @param acceptTypes the accept attribute parsed by the WebView
+     * @return true if a {@code image/*} or {@code image/<sub>} type is present
+     */
+    private static boolean acceptsImage(String[] acceptTypes) {
+        if (acceptTypes == null) return false;
+        for (String t : acceptTypes) {
+            if (t == null) continue;
+            String trimmed = t.trim().toLowerCase();
+            if (trimmed.isEmpty()) continue;
+            if (trimmed.startsWith("image/") || trimmed.equals("image")) return true;
+        }
+        return false;
+    }
+
+    /**
+     * @param cameraOnly  go straight to the camera (capture attribute set on input)
+     * @param allowMultiple multiple attribute set; only applies to gallery pick
+     */
+    private void launchImageChooser(boolean cameraOnly, boolean allowMultiple) {
+        // The camera intent only requires runtime CAMERA permission because we
+        // declare it in the manifest. Without it some OEM camera apps refuse.
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
+                != PackageManager.PERMISSION_GRANTED) {
+            pendingChooserCameraOnly = cameraOnly;
+            pendingChooserAllowGallery = !cameraOnly && allowMultiple;
+            ActivityCompat.requestPermissions(this,
+                    new String[]{Manifest.permission.CAMERA}, REQ_CAMERA_FOR_PICKER);
+            return;
+        }
+        Intent cameraIntent = createCameraCaptureIntent();
+        if (cameraOnly) {
+            if (cameraIntent == null) {
+                Toast.makeText(this, R.string.toast_camera_unavailable, Toast.LENGTH_SHORT).show();
+                deliverFilePathResult(null);
+                return;
+            }
+            try {
+                fileChooserLauncher.launch(cameraIntent);
+            } catch (Exception e) {
+                deliverFilePathResult(null);
+            }
+            return;
+        }
+        // Both camera and gallery — use a system chooser with the camera as the
+        // initial intent. This is the single-tap UX the old Cordova camera plugin
+        // used to give us.
+        Intent gallery = new Intent(Intent.ACTION_GET_CONTENT);
+        gallery.addCategory(Intent.CATEGORY_OPENABLE);
+        gallery.setType("image/*");
+        if (allowMultiple) {
+            gallery.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+        }
+        Intent chooser = Intent.createChooser(gallery, getString(R.string.file_chooser_title));
+        if (cameraIntent != null) {
+            chooser.putExtra(Intent.EXTRA_INITIAL_INTENTS, new Intent[]{cameraIntent});
+        }
+        try {
+            fileChooserLauncher.launch(chooser);
+        } catch (Exception e) {
+            deliverFilePathResult(null);
+        }
+    }
+
+    /**
+     * Build a {@code MediaStore.ACTION_IMAGE_CAPTURE} intent that writes the
+     * photo to our external app dir via {@code FileProvider}. The URI is stashed
+     * in {@link #pendingPhotoUri} for the result handler to return to the page.
+     * Returns {@code null} if no camera app is available.
+     */
+    private Intent createCameraCaptureIntent() {
+        Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+        if (intent.resolveActivity(getPackageManager()) == null) {
+            return null;
+        }
+        try {
+            File dir = getExternalFilesDir(Environment.DIRECTORY_PICTURES);
+            if (dir == null) dir = new File(getCacheDir(), "captures");
+            if (!dir.exists() && !dir.mkdirs()) {
+                return null;
+            }
+            File photo = new File(dir, "capture_" + System.currentTimeMillis() + ".jpg");
+            pendingPhotoUri = FileProvider.getUriForFile(this,
+                    getPackageName() + ".fileprovider", photo);
+            intent.putExtra(MediaStore.EXTRA_OUTPUT, pendingPhotoUri);
+            intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                    | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            return intent;
+        } catch (Exception e) {
+            pendingPhotoUri = null;
+            return null;
+        }
+    }
+
+    /** Hand a result to the pending {@link #filePathCallback} and clear it. */
+    private void deliverFilePathResult(Uri[] uris) {
+        pendingPhotoUri = null;
+        if (filePathCallback != null) {
+            filePathCallback.onReceiveValue(uris);
+            filePathCallback = null;
+        }
     }
 
     private void registerScanLauncher() {
@@ -723,6 +941,31 @@ public class MainActivity extends AppCompatActivity {
                     && grantResults[0] == PackageManager.PERMISSION_GRANTED;
             if (!granted) {
                 Toast.makeText(this, R.string.toast_notification_denied, Toast.LENGTH_LONG).show();
+            }
+        } else if (requestCode == REQ_CAMERA_FOR_PICKER) {
+            boolean granted = grantResults.length > 0
+                    && grantResults[0] == PackageManager.PERMISSION_GRANTED;
+            boolean cameraOnly = pendingChooserCameraOnly;
+            boolean allowGallery = pendingChooserAllowGallery;
+            pendingChooserCameraOnly = false;
+            pendingChooserAllowGallery = false;
+            if (granted) {
+                launchImageChooser(cameraOnly, allowGallery);
+            } else if (cameraOnly) {
+                Toast.makeText(this, R.string.toast_camera_denied, Toast.LENGTH_LONG).show();
+                deliverFilePathResult(null);
+            } else {
+                // No camera permission — fall back to gallery only.
+                Intent gallery = new Intent(Intent.ACTION_GET_CONTENT);
+                gallery.addCategory(Intent.CATEGORY_OPENABLE);
+                gallery.setType("image/*");
+                if (allowGallery) gallery.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+                try {
+                    fileChooserLauncher.launch(Intent.createChooser(gallery,
+                            getString(R.string.file_chooser_title)));
+                } catch (Exception e) {
+                    deliverFilePathResult(null);
+                }
             }
         } else if (requestCode == REQ_LOCATION) {
             boolean granted = grantResults.length > 0
